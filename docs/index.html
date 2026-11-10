@@ -138,6 +138,11 @@ small.fonte{color:#6f8194;font-size:12px}
         <option value="sem_registro">Sem registro</option>
         <option value="autorizada">Autorizada</option>
       </select>
+      <select id="filtro-pais">
+        <option value="">Todos os mercados</option>
+        <option value="br">Só Brasil (Pix / pt-BR)</option>
+        <option value="int">Só internacional</option>
+      </select>
       <select id="filtro-op">
         <option value="">Qualquer operação</option>
         <option value="multi">Só quem divide infraestrutura</option>
@@ -219,7 +224,8 @@ small.fonte{color:#6f8194;font-size:12px}
           • Só a home é lida: site que monta tudo em JavaScript aparece com menos sinais do que tem.<br>
           • O crt.sh falha com frequência (502) e mostra certificados com atraso; por isso a janela usa a data do certificado mais recente, não o relógio.<br>
           • A lista da Anatel não está disponível em arquivo aberto — quando estiver, entra no pipeline sem mudar o resto.<br>
-          • Domínio internacional que não atua no Brasil também cai em "sem registro".
+          • Domínio internacional que não atua no Brasil também cai em "sem registro" — o selo <b>BR</b> marca quem fala com o brasileiro (Pix, reais, pt-BR, .br).<br>
+          • Afiliado e site de review entram na mesma lista do operador: o radar vê a página, não o contrato.
           </p>
         </div>
       </div>
@@ -283,6 +289,7 @@ function render(){
     ['candidatos por nome', fmt(f.candidatos_nome), 'alerta'],
     ['páginas lidas', fmt(f.verificados), ''],
     ['com cara de casa de aposta', fmt(f.com_cara_de_bet), 'alerta'],
+    ['falando com o Brasil', fmt(f.no_brasil||0), 'bom'],
     ['novos na última varredura', fmt(v.novos_bets), 'bom'],
     ['clones de marca autorizada', fmt(f.clones), 'ruim'],
     ['operações mapeadas', fmt(f.operacoes), ''],
@@ -316,8 +323,11 @@ function renderTabela(){
   const q = document.getElementById('busca').value.trim().toLowerCase();
   const cl = document.getElementById('filtro-classe').value;
   const op = document.getElementById('filtro-op').value;
+  const pais = document.getElementById('filtro-pais').value;
   const lista = DOMS.filter(d=>{
     if(cl && d.classe!==cl) return false;
+    if(pais==='br' && !d.br) return false;
+    if(pais==='int' && d.br) return false;
     if(op==='multi' && !d.op) return false;
     if(op==='solo' && d.op) return false;
     if(!q) return true;
@@ -327,7 +337,7 @@ function renderTabela(){
   document.getElementById('sem-resultado').style.display = lista.length? 'none':'block';
   document.getElementById('linhas').innerHTML = lista.map(d=>{
     const i = DOMS.indexOf(d);
-    return '<tr data-i="'+i+'"><td class="dom">'+esc(d.d)+'</td><td>'+rotulo(d.classe)+
+    return '<tr data-i="'+i+'"><td class="dom">'+esc(d.d)+(d.br? ' <span class="tag" style="color:#6ee7b7">BR</span>':'')+'</td><td>'+rotulo(d.classe)+
       (d.m? ' <span class="tag">'+esc(d.m)+'</span>':'')+'</td>'+
       '<td class="pts">'+fmt(d.p)+'</td>'+
       '<td>'+(d.s||[]).slice(0,4).map(s=>'<span class="tag">'+esc(s)+'</span>').join('')+'</td>'+
@@ -398,11 +408,11 @@ function renderAutorizadas(){
 }
 
 document.addEventListener('input', e=>{
-  if(e.target.id==='busca'||e.target.id==='filtro-classe'||e.target.id==='filtro-op') renderTabela();
+  if(e.target.id==='busca'||e.target.id==='filtro-classe'||e.target.id==='filtro-op'||e.target.id==='filtro-pais') renderTabela();
   if(e.target.id==='busca-auto') renderAutorizadas();
 });
 document.addEventListener('change', e=>{
-  if(e.target.id==='filtro-classe'||e.target.id==='filtro-op') renderTabela();
+  if(e.target.id==='filtro-classe'||e.target.id==='filtro-op'||e.target.id==='filtro-pais') renderTabela();
 });
 document.getElementById('linhas').addEventListener('click', e=>{
   const tr = e.target.closest('tr'); if(!tr) return;

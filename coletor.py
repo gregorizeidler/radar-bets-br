@@ -114,6 +114,8 @@ def peso_nome(dominio):
         ponto += 3
     if "aposta" in sld or "cassino" in sld or "casino" in sld:
         ponto += 3
+    if dominio.endswith(".br"):
+        ponto += 6
     return ponto
 
 
@@ -142,6 +144,7 @@ def candidatos_por_certificado(autorizadas, dias=60):
             return termo, fontes.certificados(termo, dias=100000)
         except Exception as e:  # noqa: BLE001
             return termo, e
+    betbr = set()
     with ThreadPoolExecutor(max_workers=2) as ex:
         for termo, res in ex.map(um, TERMOS_CRT):
             if isinstance(res, Exception):
@@ -149,6 +152,8 @@ def candidatos_por_certificado(autorizadas, dias=60):
                 continue
             for c in res:
                 vistos.setdefault(c["dominio"], c["emissao"])
+                if c["dominio"].endswith(".bet.br"):
+                    betbr.add(c["dominio"])
     if not vistos:
         return [], erros, None
     referencia = max(vistos.values())
@@ -164,6 +169,14 @@ def candidatos_por_certificado(autorizadas, dias=60):
         if ts >= corte:
             recentes.append({"dominio": d, "peso": peso_nome(d) + 4,
                              "origem": "certificado", "emissao": emissao})
+    # .bet.br é registro restrito a operadora autorizada: entra inteiro,
+    # independente da data do certificado.
+    ja = {x["dominio"] for x in recentes}
+    for d in sorted(betbr):
+        if d in oficiais or d in ja:
+            continue
+        recentes.append({"dominio": d, "peso": peso_nome(d) + 12,
+                         "origem": "bet.br", "emissao": vistos.get(d, "")})
     recentes.sort(key=lambda x: (-x["peso"], x["dominio"]))
     return recentes, erros, referencia
 
@@ -367,7 +380,10 @@ def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=250):
         "data": hoje, "dominios": resultados, "registro": registro_dia,
         "operacoes": operacoes[:60], "meia_vida": meia_vida, "rotacao": rotacao[:80]})
 
-    todos_bets = sorted(bets, key=lambda r: (r.get("classe") == "autorizada",
+    for r in bets:
+        r["br"] = analise.eh_brasil(r.get("d"), r.get("t", ""), r.get("s", []))
+    todos_bets = sorted(bets, key=lambda r: (not r.get("br"),
+                                             r.get("classe") == "autorizada",
                                              -r.get("p", 0), r.get("d", "")))
     por_tld = {}
     for r in todos_bets:
@@ -381,6 +397,7 @@ def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=250):
         "sem_registro": sum(1 for r in todos_bets if r.get("classe") == "sem_registro"),
         "clones": sum(1 for r in todos_bets if r.get("classe") == "clone"),
         "autorizadas": sum(1 for r in todos_bets if r.get("classe") == "autorizada"),
+        "no_brasil": sum(1 for r in todos_bets if r.get("br")),
         "operacoes": len(operacoes), "multi_dominio": sum(o["n"] for o in operacoes),
         "dominios_oficiais": autorizadas["total_dominios"],
         "empresas_oficiais": autorizadas["total_empresas"],
@@ -401,13 +418,13 @@ def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=250):
         w = csv.writer(f)
         w.writerow(["dominio", "classe", "marca_autorizada", "pontos", "sinais",
                     "ips", "nameservers", "kit", "analytics", "primeira_aparição",
-                    "visto", "status", "operacao", "titulo"])
+                    "visto", "status", "operacao", "brasil", "titulo"])
         for r in todos_bets:
             w.writerow([r.get("d"), r.get("classe"), r.get("m", ""), r.get("p"),
                         "; ".join(r.get("s", [])), " ".join(r.get("ip", [])),
                         " ".join(r.get("ns", [])), r.get("k", ""),
                         " ".join(r.get("g", [])), r.get("pr", ""), r.get("visto", ""),
-                        r.get("st", ""), r.get("op", ""), r.get("t", "")])
+                        r.get("st", ""), r.get("op", ""), "sim" if r.get("br") else "nao", r.get("t", "")])
     if verbose:
         print("funil: %s" % json.dumps(funil, ensure_ascii=False))
         print("tempo total: %.0fs" % (time.time() - t0))

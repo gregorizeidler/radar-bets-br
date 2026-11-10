@@ -239,3 +239,24 @@ def clusters(itens, chaves=("ip", "k", "g")):
     for i, it in enumerate(itens):
         grupos.setdefault(acha("d:%d" % i), []).append(it)
     return list(grupos.values())
+
+
+SINAIS_BR = ["pix", "r$", "reais", "cpf", "brasil", "brl", "jogo do bicho",
+             "tigrinho", "saque", "aposta", "apostas", "cassino", "placar",
+             "rodada gratis", "rodada grátis", "depósito", "deposito"]
+
+
+def eh_brasil(dominio, titulo="", sinais=None):
+    """Marca o domínio como operando em português do Brasil.
+
+    Não é nacionalidade de empresa: é sinal de que a página fala com o
+    brasileiro (Pix, reais, CPF, TLD .br)."""
+    d = (dominio or "").lower()
+    pontos = 0
+    if d.endswith(".br"):
+        pontos += 4
+    texto = ((titulo or "") + " " + " ".join(sinais or [])).lower()
+    for s in SINAIS_BR:
+        if s in texto:
+            pontos += 2
+    return pontos >= 4
