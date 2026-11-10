@@ -26,7 +26,7 @@ jobs:
       - name: coleta
         env:
           MAX: "2500"
-        run: python3 run.py --max "$MAX" --workers 32
+        run: python3 run.py --max "$MAX" --workers 40
       - name: publica
         run: |
           git config user.name "radar-bets-bot"

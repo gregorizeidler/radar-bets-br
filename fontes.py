@@ -164,7 +164,7 @@ def dns(host, timeout=3):
     return saida
 
 
-def pagina(host, timeout=9):
+def pagina(host, timeout=6):
     """Um único GET na home, sem seguir caminhos internos, sem login."""
     for esquema in ("https", "http"):
         try:

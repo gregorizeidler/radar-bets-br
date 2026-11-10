@@ -213,7 +213,7 @@ def candidatos_por_certificado(autorizadas, dias=60):
     return recentes, erros, referencia
 
 
-def verificar(item, autorizadas, timeout=7):
+def verificar(item, autorizadas, timeout=6):
     d = item["dominio"]
     info = fontes.dns(d, timeout=5)
     registro = {"d": d, "origem": item.get("origem", ""), "ip": info["a"][:4],
@@ -250,7 +250,7 @@ def _incorpora(reg, conhecidos):
     conhecidos[reg["d"]] = reg
 
 
-def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=250, prazo=1500):
+def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=200, prazo=1500):
     t0 = time.time()
     autorizadas = fontes.lista_autorizadas()
     salvar_json(os.path.join(DATA, "autorizadas.json"), autorizadas)
@@ -417,7 +417,7 @@ def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=250, praz
 
     hoje = time.strftime("%Y-%m-%d")
     registro_dia = {
-        "data": hoje, "universo": len(dominios),
+        "data": hoje, "universo": n_universo,
         "candidatos": len(fila_nome), "certificados_dominios": len(recentes),
         "referencia_certificados": referencia_ct,
         "verificados_hoje": len(resultados),
