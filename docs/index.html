@@ -482,8 +482,8 @@ function porQue(d){
   const fortes = d.pf || [];
   f.push('A página inicial respondeu com <b>'+fmt(d.p)+' pontos</b> de sinal (o corte é 8) e '+
     (fortes.length? '<b>'+fortes.length+' termo(s) forte(s)</b>: '+fortes.map(t=>'&ldquo;'+esc(t)+'&rdquo;').join(', ') : 'nenhum termo forte'));
-  const medios = (d.s||[]).filter(s=>fortes.indexOf(s)<0);
-  if(medios.length) f.push('Somaram pontos também: '+medios.map(t=>'&ldquo;'+esc(t)+'&rdquo;').join(', ')+'.');
+  const outros = (d.s||[]).filter(s=>fortes.indexOf(s)<0);
+  if(outros.length) f.push('Na mesma página também apareceram: '+outros.map(t=>'&ldquo;'+esc(t)+'&rdquo;').join(', ')+'.');
   if(d.classe==='clone') f.push('O nome imita a marca <b>'+esc(d.m||'autorizada')+'</b>, de operadora autorizada, mas em domínio que não é o oficial.');
   else f.push('O domínio <b>não está</b> na lista oficial de autorizadas do SPA/MF.');
   if(d.t) f.push('Título da página: &ldquo;'+esc(d.t)+'&rdquo;.');
