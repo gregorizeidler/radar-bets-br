@@ -18,7 +18,7 @@ import re
 import statistics
 import time
 import zipfile
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 
 import fontes
 import analise
@@ -266,20 +266,36 @@ def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=250, praz
             len(pendentes), len(lote), time.time() - t0))
 
     resultados = []
-    for i in range(0, len(lote), lote_salvar):
-        if time.time() - t0 > prazo and resultados:
-            if verbose:
-                print("prazo de %ds atingido: publico o que ja foi verificado" % prazo)
-            break
-        pedaco = lote[i:i + lote_salvar]
-        with ThreadPoolExecutor(max_workers=workers) as ex:
-            for reg in ex.map(lambda item: verificar(item, autorizadas), pedaco):
+    ex = ThreadPoolExecutor(max_workers=workers)
+    try:
+        for i in range(0, len(lote), lote_salvar):
+            if time.time() - t0 > prazo and resultados:
+                if verbose:
+                    print("prazo de %ds atingido: publico o que ja foi verificado" % prazo)
+                break
+            pedaco = lote[i:i + lote_salvar]
+            # teto de tempo por lote: domínio que trava não segura a varredura
+            limite = max(120, int(len(pedaco) / max(1, workers) * 12))
+            futuros = [ex.submit(verificar, item, autorizadas) for item in pedaco]
+            feitos, _ = wait(futuros, timeout=limite)
+            atrasados = 0
+            for f in futuros:
+                if f not in feitos:
+                    atrasados += 1
+                    continue
+                try:
+                    reg = f.result()
+                except Exception:  # noqa: BLE001
+                    continue
                 _incorpora(reg, conhecidos)
                 resultados.append(reg)
-        salvar_json(estado_path, estado)
-        if verbose:
-            print("  %d/%d verificados (%.0fs)" % (
-                len(resultados), len(lote), time.time() - t0))
+            salvar_json(estado_path, estado)
+            if verbose:
+                print("  %d/%d verificados (%.0fs)%s" % (
+                    len(resultados), len(lote), time.time() - t0,
+                    " — %d sem resposta no prazo" % atrasados if atrasados else ""))
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
 
     todos = list(conhecidos.values())
     for r in todos:

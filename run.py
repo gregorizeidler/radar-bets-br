@@ -1,5 +1,7 @@
 import argparse
 import json
+import os
+import sys
 import coletor
 
 if __name__ == "__main__":
@@ -9,3 +11,6 @@ if __name__ == "__main__":
     a = p.parse_args()
     d = coletor.rodar(max_verificacoes=a.max, workers=a.workers)
     print(json.dumps(d["funil"], ensure_ascii=False))
+    sys.stdout.flush()
+    # thread presa em conexão não deve segurar o fim do job
+    os._exit(0)
