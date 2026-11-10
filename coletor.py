@@ -76,7 +76,7 @@ def universo(dias_cache=7, verbose=True):
     vistos = set()
     for nome, url in INDICES:
         try:
-            bruto, _, _ = fontes.baixar(url, timeout=240, tentativas=2,
+            bruto, _, _ = fontes.baixar(url, timeout=90, tentativas=2,
                                        max_bytes=150 * 1024 * 1024)
             if url.endswith(".zip"):
                 with zipfile.ZipFile(io.BytesIO(bruto)) as z:
@@ -135,6 +135,37 @@ def candidatos(dominios, autorizadas, limite=None):
         fila.append({"dominio": d, "peso": peso_nome(d), "origem": "indice"})
     fila.sort(key=lambda x: (-x["peso"], x["dominio"]))
     return fila[:limite] if limite else fila
+
+
+def lista_de_candidatos(autorizadas, dias=7, forcar=False, verbose=True):
+    """Candidatos prontos, guardados no repositório e renovados uma vez por semana.
+
+    Evita baixar 2,4 milhões de domínios em toda execução: é isso que fazia a
+    varredura diária demorar meia hora em vez de seis minutos."""
+    caminho = os.path.join(DATA, "candidatos.json")
+    hoje = time.mktime(time.strptime(time.strftime("%Y-%m-%d"), "%Y-%m-%d"))
+    atual = ler_json(caminho)
+    if atual and not forcar:
+        try:
+            gerado = time.mktime(time.strptime(atual["gerado_em"], "%Y-%m-%d"))
+            if (hoje - gerado) / 86400 < dias:
+                lista = [{"dominio": d, "peso": p, "origem": "indice"}
+                         for d, p in atual["lista"]]
+                if verbose:
+                    print("candidatos em cache: %d, gerado em %s" % (
+                        len(lista), atual["gerado_em"]))
+                return lista, atual.get("universo", 0)
+        except Exception:  # noqa: BLE001
+            pass
+    dominios = universo()
+    lista = candidatos(dominios, autorizadas)
+    salvar_json(caminho, {"gerado_em": time.strftime("%Y-%m-%d"),
+                          "universo": len(dominios),
+                          "lista": [[c["dominio"], c["peso"]] for c in lista[:90000]]})
+    if verbose:
+        print("universo: %d dominios, %d candidatos (renovado)" % (
+            len(dominios), len(lista)))
+    return lista, len(dominios)
 
 
 def candidatos_por_certificado(autorizadas, dias=60):
@@ -233,11 +264,11 @@ def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=250, praz
     estado = ler_json(estado_path, {"dominios": {}, "varreduras": []})
     conhecidos = estado["dominios"]
 
-    dominios = universo()
-    fila_nome = candidatos(dominios, autorizadas)
+    fila_nome, n_universo = lista_de_candidatos(
+        autorizadas, forcar=bool(os.environ.get("FORCAR_UNIVERSO")))
     if verbose:
-        print("universo: %d dominios, %d candidatos por nome (%.0fs)" % (
-            len(dominios), len(fila_nome), time.time() - t0))
+        print("candidatos: %d (universo %d, %.0fs)" % (
+            len(fila_nome), n_universo, time.time() - t0))
 
     recentes, erros_crt, referencia_ct = candidatos_por_certificado(autorizadas)
     if verbose:
@@ -411,7 +442,7 @@ def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=250, praz
         tld = r["d"].rsplit(".", 1)[-1]
         por_tld[tld] = por_tld.get(tld, 0) + 1
     funil = {
-        "universo": len(dominios), "candidatos_nome": len(fila_nome),
+        "universo": n_universo, "candidatos_nome": len(fila_nome),
         "certificados_novos": len(recentes),
         "verificados": sum(1 for r in todos if r.get("visto")),
         "com_cara_de_bet": len(todos_bets),
