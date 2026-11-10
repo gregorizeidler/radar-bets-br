@@ -203,10 +203,11 @@ def ip_dedicado(ip):
     return not any(end in rede for rede in CDN)
 
 
-def clusters(itens, chaves=("ip", "k", "g", "ns")):
+def clusters(itens, chaves=("ip", "k", "g")):
     """Componentes conexos por infraestrutura compartilhada (union-find).
 
-    IP de CDN não conta: milhares de sites dividem o mesmo endereço."""
+    IP de CDN não conta: milhares de sites dividem o mesmo endereço. Nameserver
+    também não entra: Cloudflare e registradores hospedam centenas de milhares."""
     pai = {}
 
     def acha(x):

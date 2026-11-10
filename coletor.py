@@ -273,7 +273,7 @@ def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=250):
             r["classe"] = "descartado"
 
     bets = [r for r in todos if r.get("classe") in ("clone", "sem_registro", "autorizada")]
-    grupos = analise.clusters(bets, chaves=("ip", "k", "g", "ns"))
+    grupos = analise.clusters(bets, chaves=("ip", "k", "g"))
     operacoes = []
     for i, g in enumerate(sorted(grupos, key=len, reverse=True)):
         if len(g) < 2:
@@ -388,7 +388,8 @@ def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=250):
     saida = {
         "gerado_em": hoje, "fonte_autorizadas": autorizadas["fonte"],
         "referencia_certificados": referencia_ct, "funil": funil,
-        "dominios": todos_bets,
+        "dominios": todos_bets[:2500],
+        "total_dominios": len(todos_bets),
         "descartados": sum(1 for r in todos if r.get("classe") == "descartado"),
         "operacoes": operacoes[:40], "meia_vida": meia_vida,
         "rotacao": rotacao[:40], "varreduras": estado["varreduras"][-60:],
