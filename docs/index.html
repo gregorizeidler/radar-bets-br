@@ -276,7 +276,7 @@ function render(){
   const passos = [
     ['Universo Tranco', fmt(f.universo), 'top 1 milhão, baixado semanalmente'],
     ['Candidatos por nome', fmt(f.candidatos_nome), (v.candidatos_por_nome!=null? fmt(v.candidatos_por_nome)+' nesta varredura' : 'filtro por termo no domínio')],
-    ['Certificado novo', fmt(DADOS.referencia_certificados || '—'), 'termo no certificado, janela de 45 dias'],
+    ['Certificado novo', fmt(v.certificados_dominios || 0), 'domínios com certificado na janela · ref. ' + (DADOS.referencia_certificados || '—')],
     ['Páginas lidas', fmt(f.verificados), (v.verificados_hoje!=null? fmt(v.verificados_hoje)+' nesta varredura' : 'um GET na home')],
     ['Cara de aposta', fmt(f.com_cara_de_bet), 'sinal forte + pontuação mínima'],
     ['Operações', fmt(f.operacoes), fmt(f.multi_dominio)+' domínios agrupados'],
