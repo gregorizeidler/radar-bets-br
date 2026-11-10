@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: testes
-        run: python3 tests/test_analise.py
+        run: python3 tests/test_analise.py && python3 tests/test_bundle.py
       - name: coleta
         env:
           MAX: "2500"

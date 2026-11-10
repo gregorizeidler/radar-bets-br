@@ -52,6 +52,55 @@ def limpar(texto):
     return re.sub(r"\s+", " ", (texto or "")).strip()
 
 
+VOCAB_BUNDLE = [
+    "cassino", "casino", "aposta", "apostas", "aviator", "pragmatic", "pgsoft",
+    "slot", "slots", "odds", "bonus", "bônus", "giro", "rodada", "multiplicador",
+    "deposito", "depósito", "saque", "pix", "fortune tiger", "tigrinho", "roleta",
+    "jackpot", "crash", "cassino online", "casino online", "apuestas",
+]
+
+
+def evidencia_bundle(texto):
+    """Quanto de vocabulário de aposta existe no bundle, contando repetição.
+
+    Um bundle de e-commerce cita "bonus" uma vez; o de uma casa de aposta cita
+    cassino, slot, odds e rodada dezenas de vezes. Por isso a frequência entra.
+    """
+    low = (texto or "").lower()
+    if not low:
+        return {"pontos": 0, "termos": [], "forte": False}
+    achados = []
+    total = 0
+    for termo in VOCAB_BUNDLE:
+        n = low.count(termo)
+        if n:
+            total += min(n, 10)
+            if n >= 3:
+                achados.append("%s x%d" % (termo, n))
+    forte = any(p.search(low) for p in FORTES_RE)
+    return {"pontos": total if forte else 0, "termos": achados[:8], "forte": forte}
+
+
+def sinais_de_texto(texto):
+    """Igual a sinais_de_bet, mas sem cortar o texto (usado no bundle)."""
+    texto = texto or ""
+    fortes, medios = [], []
+    for p in FORTES_RE:
+        m = p.search(texto)
+        if m:
+            fortes.append(m.group(0).lower()[:40])
+    for p in MEDIOS_RE:
+        m = p.search(texto)
+        if m:
+            medios.append(m.group(0).lower()[:40])
+    fortes = sorted(set(fortes))
+    medios = sorted(set(medios))
+    pontos = 3 * len(fortes) + len(medios)
+    return {"pontos": pontos, "fortes": fortes, "medios": medios,
+            "sinais": (fortes + medios)[:12],
+            "parece_bet": pontos >= 8 and len(fortes) >= 1}
+
+
 def sinais_de_bet(html):
     """Pontua sinais de casa de aposta no HTML servido. Não executa JS."""
     texto = (html or "")[:400000]
@@ -261,3 +310,21 @@ def eh_brasil(dominio, titulo="", sinais=None):
         if s in texto:
             pontos += 2
     return pontos >= 4
+
+def sinais_no_pacote(html, base_url=""):
+    """Sinais dentro dos arquivos .js da home.
+
+    Site que monta a tela por JavaScript serve uma casca vazia: o texto de
+    aposta está no bundle, não no HTML. Aqui a gente pontua o bundle com a
+    mesma régua, mas com corte mais alto, porque biblioteca de terceiro pode
+    citar "casino" de passagem.
+    """
+    import urllib.parse
+    urls = []
+    for m in ASSET.finditer(html or ""):
+        u = m.group(1)
+        if not u.lower().split("?")[0].endswith(".js"):
+            continue
+        urls.append(urllib.parse.urljoin(base_url or "", u))
+    return urls[:3]
+

@@ -230,6 +230,16 @@ def verificar(item, autorizadas, timeout=6):
                          "k": analise.impressao_kit(pag["html"]),
                          "g": analise.ids_analytics(pag["html"]),
                          "sv": pag["servidor"]})
+        # Casca de SPA: a home volta vazia e o texto de aposta mora no bundle.
+        if not sinais["parece_bet"] and len(pag["html"]) < 60000:
+            js = bundle(pag["html"], pag.get("url") or ("https://" + d + "/"))
+            if js:
+                ev = analise.evidencia_bundle(js)
+                if ev["forte"] and ev["pontos"] >= 15:
+                    registro["p"] = max(registro.get("p", 0), min(45, ev["pontos"]))
+                    registro["s"] = ["js:" + x for x in ev["termos"]][:10]
+                    registro["pf"] = ["js:" + ev["termos"][0]] if ev["termos"] else ["js"]
+                    registro["pb"] = True
         titulo = re.search(r"<title[^>]*>(.*?)</title>", pag["html"], re.S | re.I)
         if titulo:
             registro["t"] = analise.limpar(re.sub(r"<[^>]+>", " ", titulo.group(1)))[:90]
@@ -240,6 +250,24 @@ def verificar(item, autorizadas, timeout=6):
     return registro
 
 
+def bundle(html, base, teto=1200000):
+    """Baixa até 3 arquivos .js da home e devolve o maior texto somado."""
+    pedacos, total = [], 0
+    for url in analise.sinais_no_pacote(html, base):
+        try:
+            bruto, _, _ = fontes.baixar(url, timeout=8, tentativas=1, max_bytes=800 * 1024)
+            texto = bruto.decode("utf-8", "ignore")
+        except Exception:  # noqa: BLE001
+            continue
+        if len(texto) < 2000:
+            continue
+        pedacos.append(texto)
+        total += len(texto)
+        if total >= teto:
+            break
+    return "\n".join(pedacos)
+
+
 def _incorpora(reg, conhecidos):
     anterior = conhecidos.get(reg["d"], {})
     reg["pr"] = anterior.get("pr") or reg["visto"]
@@ -248,6 +276,29 @@ def _incorpora(reg, conhecidos):
     if anterior.get("origem") == "certificado" and reg["origem"] == "indice":
         reg["origem"] = "indice+certificado"
     conhecidos[reg["d"]] = reg
+
+
+def fila_reavaliacao(conhecidos, pendentes, max_verificacoes, fracao=0.3):
+    """Devolve os reprovados que voltam para a fila nesta varredura.
+
+    A régua mudou (agora o bundle JavaScript também é lido) e a maior parte
+    dos reprovados com nome forte é SPA que servia casca vazia. Eles voltam,
+    os mais antigos primeiro, sem nunca ocupar a fila inteira.
+    """
+    ja = {c["dominio"] for c in pendentes}
+    rever = []
+    for d, r in conhecidos.items():
+        if d in ja or not isinstance(r, dict):
+            continue
+        if r.get("pb") or r.get("st") != "vivo":
+            continue
+        pn = peso_nome(d)
+        if pn >= 8:
+            rever.append({"dominio": d, "peso": pn - 6, "origem": "reavaliacao",
+                          "visto_ant": r.get("visto") or ""})
+    rever.sort(key=lambda x: (x["visto_ant"], x["dominio"]))
+    teto = max(50, int(max_verificacoes * fracao))
+    return rever[:teto]
 
 
 def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=200, prazo=1500):
@@ -291,7 +342,8 @@ def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=200, praz
                 continue
         pendentes.append(c)
     pendentes.sort(key=lambda x: (-x["peso"], x["dominio"]))
-    lote = pendentes[:max_verificacoes]
+    rever = fila_reavaliacao(conhecidos, pendentes, max_verificacoes)
+    lote = rever + pendentes[:max(0, max_verificacoes - len(rever))]
     if verbose:
         print("fila: %d pendentes, verificando %d (%.0fs)" % (
             len(pendentes), len(lote), time.time() - t0))
