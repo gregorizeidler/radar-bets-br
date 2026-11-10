@@ -232,7 +232,7 @@ def clusters(itens, max_por_ip=4):
         for ip in r.get("ip", []):
             ips_usados.setdefault(ip, []).append(i)
     for ip, donos in ips_usados.items():
-        if len(donos) <= max_por_ip:
+        if len(donos) <= max_por_ip and ip_dedicado(ip):
             chaves.setdefault("ip:" + ip, donos)
     for donos in chaves.values():
         for j in donos[1:]:
