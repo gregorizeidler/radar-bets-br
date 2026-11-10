@@ -76,7 +76,8 @@ def universo(dias_cache=7, verbose=True):
     vistos = set()
     for nome, url in INDICES:
         try:
-            bruto, _, _ = fontes.baixar(url, timeout=240, tentativas=2)
+            bruto, _, _ = fontes.baixar(url, timeout=240, tentativas=2,
+                                       max_bytes=150 * 1024 * 1024)
             if url.endswith(".zip"):
                 with zipfile.ZipFile(io.BytesIO(bruto)) as z:
                     arquivo = [n for n in z.namelist() if n.endswith(".csv")][0]

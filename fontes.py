@@ -22,7 +22,8 @@ RESGATE = {"bet.br", "com.br", "net.br", "org.br", "app.br", "dev.br",
            "co.uk", "com.ar", "com.ve", "co.mz", "com.py"}
 
 
-def baixar(url, timeout=30, tentativas=3, headers=None):
+def baixar(url, timeout=30, tentativas=3, headers=None, max_bytes=2000000):
+    """GET com prazo total e teto de bytes: servidor que pinga devagar não trava a fila."""
     h = {"User-Agent": UA, "Accept": "*/*",
          "Accept-Language": "pt-BR,pt;q=0.9"}
     if headers:
@@ -32,7 +33,17 @@ def baixar(url, timeout=30, tentativas=3, headers=None):
         try:
             req = urllib.request.Request(url, headers=h)
             with urllib.request.urlopen(req, timeout=timeout) as r:
-                return r.read(), dict(r.headers), getattr(r, "status", 200)
+                inicio = time.time()
+                partes, total = [], 0
+                while True:
+                    pedaco = r.read(65536)
+                    if not pedaco:
+                        break
+                    partes.append(pedaco)
+                    total += len(pedaco)
+                    if total >= max_bytes or time.time() - inicio > timeout:
+                        break
+                return b"".join(partes), dict(r.headers), getattr(r, "status", 200)
         except Exception as e:  # noqa: BLE001
             ultimo = e
             time.sleep(1.2 * (i + 1))
