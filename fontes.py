@@ -144,16 +144,21 @@ def certificados(termo, dias=4, timeout=90):
     return saida
 
 
-def dns(host, timeout=4):
-    """Resolve o domínio pelo resolver do sistema: rápido e sem depender de API."""
+def _resolve(host):
     import socket
+    return socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
+
+
+def dns(host, timeout=3):
+    """Resolve pelo resolver do sistema com prazo: DNS travado não segura a fila."""
+    import concurrent.futures as cf
     saida = {"a": [], "ns": []}
     try:
-        infos = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
-        for info in infos:
-            ip = info[4][0]
-            if ip not in saida["a"] and re.match(r"^\d{1,3}(\.\d{1,3}){3}$", ip):
-                saida["a"].append(ip)
+        with cf.ThreadPoolExecutor(max_workers=1) as ex:
+            for info in ex.submit(_resolve, host).result(timeout=timeout):
+                ip = info[4][0]
+                if ip not in saida["a"] and re.match(r"^\d{1,3}(\.\d{1,3}){3}$", ip):
+                    saida["a"].append(ip)
     except Exception:  # noqa: BLE001
         pass
     return saida

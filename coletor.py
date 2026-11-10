@@ -219,7 +219,7 @@ def _incorpora(reg, conhecidos):
     conhecidos[reg["d"]] = reg
 
 
-def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=250):
+def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=250, prazo=1500):
     t0 = time.time()
     autorizadas = fontes.lista_autorizadas()
     salvar_json(os.path.join(DATA, "autorizadas.json"), autorizadas)
@@ -267,6 +267,10 @@ def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=250):
 
     resultados = []
     for i in range(0, len(lote), lote_salvar):
+        if time.time() - t0 > prazo and resultados:
+            if verbose:
+                print("prazo de %ds atingido: publico o que ja foi verificado" % prazo)
+            break
         pedaco = lote[i:i + lote_salvar]
         with ThreadPoolExecutor(max_workers=workers) as ex:
             for reg in ex.map(lambda item: verificar(item, autorizadas), pedaco):
