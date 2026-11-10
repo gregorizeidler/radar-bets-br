@@ -133,24 +133,18 @@ def certificados(termo, dias=4, timeout=90):
     return saida
 
 
-def dns(host, timeout=8):
-    """A e NS via DNS-over-HTTPS do Google (sem chave, sem limite prático)."""
+def dns(host, timeout=4):
+    """Resolve o domínio pelo resolver do sistema: rápido e sem depender de API."""
+    import socket
     saida = {"a": [], "ns": []}
-    for tipo, chave in (("A", "a"), ("NS", "ns")):
-        try:
-            url = "https://dns.google/resolve?name=%s&type=%s" % (
-                urllib.parse.quote(host), tipo)
-            bruto, _, _ = baixar(url, timeout=timeout, tentativas=1)
-            dados = json.loads(bruto.decode("utf-8", "ignore"))
-            for a in dados.get("Answer", []) or []:
-                valor = str(a.get("data", "")).strip().rstrip(".")
-                if not valor or valor in saida[chave]:
-                    continue
-                if tipo == "A" and not re.match(r"^\d{1,3}(\.\d{1,3}){3}$", valor):
-                    continue
-                saida[chave].append(valor)
-        except Exception:  # noqa: BLE001
-            continue
+    try:
+        infos = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
+        for info in infos:
+            ip = info[4][0]
+            if ip not in saida["a"] and re.match(r"^\d{1,3}(\.\d{1,3}){3}$", ip):
+                saida["a"].append(ip)
+    except Exception:  # noqa: BLE001
+        pass
     return saida
 
 
