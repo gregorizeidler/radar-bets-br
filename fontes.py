@@ -98,7 +98,7 @@ def lista_autorizadas():
     }
 
 
-def certificados(termo, dias=4, timeout=240):
+def certificados(termo, dias=4, timeout=90):
     """Certificados emitidos na janela, cujo nome contém o termo."""
     url = "https://crt.sh/?q=%s&output=json" % urllib.parse.quote(termo)
     bruto, _, _ = baixar(url, timeout=timeout, tentativas=2)
