@@ -1,1 +1,36 @@
-name: diario\non:\n  schedule:\n    - cron: \"0 9 * * *\"   # 06:00 em Brasília\n  workflow_dispatch:\n    inputs:\n      max:\n        description: \"quantos domínios verificar nesta execução\"\n        default: \"300\"\n\npermissions:\n  contents: write\n\nconcurrency:\n  group: diario\n  cancel-in-progress: false\n\njobs:\n  coleta:\n    runs-on: ubuntu-latest\n    timeout-minutes: 45\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-python@v5\n        with:\n          python-version: \"3.12\"\n      - name: testes\n        run: python3 tests/test_analise.py\n      - name: coleta\n        run: python3 run.py --max \"${{ github.event.inputs.max || '300' }}\" --workers 16\n      - name: publica\n        run: |\n          git config user.name \"radar-bets-bot\"\n          git config user.email \"bot@users.noreply.github.com\"\n          git add -A\n          git diff --cached --quiet || git commit -m \"varredura $(date -u +%F)\"\n          git push\n
+name: diario
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: diario
+  cancel-in-progress: false
+
+jobs:
+  coleta:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: testes
+        run: python3 tests/test_analise.py
+      - name: coleta
+        env:
+          MAX: "300"
+        run: python3 run.py --max "$MAX" --workers 16
+      - name: publica
+        run: |
+          git config user.name "radar-bets-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "varredura $(date -u +%F)"
+          git push
