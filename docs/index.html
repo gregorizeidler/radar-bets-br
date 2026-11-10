@@ -144,7 +144,7 @@ td.dom a:hover{color:#fff}
 
   <section id="dominios">
     <h2>Domínios com cara de casa de aposta</h2>
-    <p class="dica">Clique numa linha para ver IP, nameserver, kit, IDs de analytics e os sinais que o classificaram. <b>Clone</b> em vermelho = nome parecido com marca de operadora autorizada, em domínio que não é o oficial.</p>
+    <p class="dica">Clique no número de pontos (ou em qualquer célula da linha) para ver <b>por que apareceu</b>, o IP, o kit e os IDs de analytics. No nome do domínio, o link abre o site em outra aba. <b>Clone</b> em vermelho = nome parecido com marca de operadora autorizada, em domínio que não é o oficial.</p>
     <div class="controles">
       <input type="search" id="busca" placeholder="Buscar domínio, marca, IP ou ID de analytics…">
       <select id="filtro-classe">
@@ -387,7 +387,7 @@ function renderTabela(){
     const i = DOMS.indexOf(d);
     return '<tr data-i="'+i+'"><td class="dom"><a href="https://'+esc(d.d)+'" target="_blank" rel="noopener noreferrer nofollow" onclick="event.stopPropagation()">'+esc(d.d)+' ↗</a>'+(d.br? ' <span class="tag" style="color:#6ee7b7">BR</span>':'')+'</td><td>'+rotulo(d.classe)+
       (d.m? ' <span class="tag">'+esc(d.m)+'</span>':'')+'</td>'+
-      '<td class="pts">'+fmt(d.p)+'</td>'+
+      '<td class="pts"><a href="#" title="por que apareceu" onclick="abrirDetalhe('+i+');return false">'+fmt(d.p)+'</a></td>'+
       '<td>'+(d.s||[]).slice(0,4).map(s=>'<span class="tag">'+esc(s)+'</span>').join('')+'</td>'+
       '<td>'+(d.op? ('#'+d.op) : '—')+'</td>'+
       '<td class="dom">'+esc((d.ip||[])[0]||'')+'</td></tr>';
@@ -496,6 +496,13 @@ function porQue(d){
   return '<ul class="porque">'+f.map(x=>'<li>'+x+'</li>').join('')+'</ul>';
 }
 
+window.abrirDetalhe = function(i){
+  const d = DOMS[+i]; if(!d) return false;
+  document.getElementById('painel').innerHTML = montarDetalhe(d);
+  document.getElementById('detalhe').classList.add('aberto');
+  return false;
+};
+
 function montarDetalhe(d){
   const linha = (a,b)=>'<dt>'+a+'</dt><dd>'+b+'</dd>';
   const url = 'https://'+esc(d.d);
@@ -523,8 +530,7 @@ function montarDetalhe(d){
 document.getElementById('linhas').addEventListener('click', e=>{
   const tr = e.target.closest('tr'); if(!tr) return;
   const d = DOMS[+tr.dataset.i]; if(!d) return;
-  document.getElementById('painel').innerHTML = montarDetalhe(d);
-  document.getElementById('detalhe').classList.add('aberto');
+  window.abrirDetalhe(+tr.dataset.i);
 });
 document.addEventListener('click', e=>{ if(e.target.dataset && e.target.dataset.fecha){ document.getElementById('detalhe').classList.remove('aberto'); } });
 document.getElementById('detalhe').addEventListener('click', e=>{
