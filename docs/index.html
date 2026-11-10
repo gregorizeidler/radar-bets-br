@@ -101,6 +101,7 @@ small.fonte{color:#6f8194;font-size:12px}
     <a href="#funil">Funil</a>
     <a href="#dominios">Domínios</a>
     <a href="#operacoes">Operações</a>
+    <a href="#tld">TLD</a>
     <a href="#rotacao">Rotação</a>
     <a href="#autorizadas">Autorizadas</a>
     <a href="#metodo">Método</a>
@@ -158,6 +159,21 @@ small.fonte{color:#6f8194;font-size:12px}
     <div id="ops"></div>
   </section>
 
+  <section id="tld">
+    <div class="grid2">
+      <div>
+        <h2>Onde esses domínios ficam</h2>
+        <p class="dica">Distribuição por TLD entre os domínios com cara de casa de aposta. Domínio de aposta raramente fica no .br — o .com e os TLDs baratos dominam, e é por isso que bloquear por extensão não resolve.</p>
+        <div id="tlds"></div>
+      </div>
+      <div>
+        <h2>Ritmo das varreduras</h2>
+        <p class="dica">Quantos domínios novos com cara de aposta entraram em cada varredura. O histórico é o que dá sentido ao número: o radar não recomeça do zero todo dia.</p>
+        <div id="ritmo"></div>
+      </div>
+    </div>
+  </section>
+
   <section id="rotacao">
     <div class="grid2">
       <div>
@@ -191,7 +207,7 @@ small.fonte{color:#6f8194;font-size:12px}
           <h3>Fontes</h3>
           <p style="font-size:13.5px;color:#c2d2e2;margin:6px 0 0">
           • <b>Certificate Transparency</b> (crt.sh): certificados emitidos com os termos <span class="tag" id="termos"></span><br>
-          • <b>Tranco</b>: top 1 milhão de domínios mais acessados do mundo, filtrados por nome com cara de aposta<br>
+          • <b>Três índices de domínios vivos</b>: Tranco, Majestic Million e Cisco Umbrella — 2,4 milhões de domínios, filtrados por nome com cara de aposta<br>
           • <b>DNS over HTTPS</b> (Google): IPs e nameservers de cada domínio<br>
           • <b>Lista oficial SPA/MF</b>: empresas autorizadas, com CNPJ, marcas e domínios
           </p>
@@ -265,20 +281,22 @@ function render(){
   document.getElementById('kpis').innerHTML = [
     ['universo de domínios varrido', fmt(f.universo), ''],
     ['candidatos por nome', fmt(f.candidatos_nome), 'alerta'],
+    ['páginas lidas', fmt(f.verificados), ''],
     ['com cara de casa de aposta', fmt(f.com_cara_de_bet), 'alerta'],
+    ['novos na última varredura', fmt(v.novos_bets), 'bom'],
     ['clones de marca autorizada', fmt(f.clones), 'ruim'],
     ['operações mapeadas', fmt(f.operacoes), ''],
-    ['domínios dividindo infraestrutura', fmt(f.multi_dominio), ''],
     ['autorizadas na lista oficial', fmt(f.empresas_oficiais), 'bom'],
   ].map(([r,v,c])=>'<div class="kpi '+c+'"><b>'+v+'</b><span>'+r+'</span></div>').join('');
 
   const v = DADOS.varreduras && DADOS.varreduras.length ? DADOS.varreduras[DADOS.varreduras.length-1] : {};
   const passos = [
-    ['Universo Tranco', fmt(f.universo), 'top 1 milhão, baixado semanalmente'],
+    ['Universo', fmt(f.universo), 'Tranco + Majestic + Umbrella, 3 índices'],
     ['Candidatos por nome', fmt(f.candidatos_nome), (v.candidatos_por_nome!=null? fmt(v.candidatos_por_nome)+' nesta varredura' : 'filtro por termo no domínio')],
     ['Certificado novo', fmt(v.certificados_dominios || 0), 'domínios com certificado na janela · ref. ' + (DADOS.referencia_certificados || '—')],
     ['Páginas lidas', fmt(f.verificados), (v.verificados_hoje!=null? fmt(v.verificados_hoje)+' nesta varredura' : 'um GET na home')],
     ['Cara de aposta', fmt(f.com_cara_de_bet), 'sinal forte + pontuação mínima'],
+    ['Novos nesta varredura', fmt(v.novos_bets), 'domínios que entraram agora'],
     ['Operações', fmt(f.operacoes), fmt(f.multi_dominio)+' domínios agrupados'],
   ];
   document.getElementById('funil').innerHTML = passos.map((p,i)=>
@@ -287,6 +305,8 @@ function render(){
 
   renderTabela();
   renderOps();
+  renderTld();
+  renderRitmo();
   renderRotacao();
   renderMeiaVida();
   if(AUT) renderAutorizadas();
@@ -326,6 +346,25 @@ function renderOps(){
     (o.ga||[]).slice(0,3).map(g=>'<span class="tag">'+esc(g)+'</span>').join('')+
     (o.marcas||[]).map(m=>'<span class="tag">marca '+esc(m)+'</span>').join('')+'</div></div>'
   ).join('') : '<div class="vazio">Nenhuma operação com mais de um domínio ainda — o agrupamento aparece conforme o histórico cresce.</div>';
+}
+
+function renderTld(){
+  const t = DADOS.por_tld || [];
+  const max = t.length? t[0][1] : 1;
+  document.getElementById('tlds').innerHTML = t.map(([k,v])=>
+    '<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:13px"><span class="dom">.'+esc(k)+'</span><span>'+fmt(v)+'</span></div>'+
+    '<div style="height:7px;background:#0e1620;border-radius:4px;overflow:hidden"><div style="height:100%;width:'+Math.round(100*v/max)+'%;background:linear-gradient(90deg,#2ecc8f,#4aa8ff)"></div></div></div>'
+  ).join('') || '<div class="vazio">sem dados ainda</div>';
+}
+
+function renderRitmo(){
+  const v = (DADOS.varreduras||[]).slice(-12);
+  const max = Math.max(1, ...v.map(x=>x.novos_bets||0));
+  document.getElementById('ritmo').innerHTML = v.length? v.map(x=>
+    '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;border-bottom:1px solid var(--linha);padding:5px 0">'+
+    '<span style="color:var(--dim)">'+esc((x.data||'').split('-').reverse().join('/'))+' · '+fmt(x.verificados_hoje||0)+' lidos</span>'+
+    '<span style="display:flex;align-items:center;gap:8px"><span style="width:'+Math.max(4,Math.round(90*(x.novos_bets||0)/max))+'px;height:6px;background:#2ecc8f;border-radius:3px;display:inline-block"></span><b>'+fmt(x.novos_bets||0)+'</b></span></div>'
+  ).join('') : '<div class="vazio">primeira varredura ainda rodando</div>';
 }
 
 function renderRotacao(){

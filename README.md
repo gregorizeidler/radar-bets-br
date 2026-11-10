@@ -10,7 +10,7 @@ lista oficial de operadoras autorizadas pelo SPA/Ministério da Fazenda.
 O workflow `.github/workflows/diario.yml` executa às 06:00 (Brasília):
 
 1. baixa a lista oficial de autorizadas da página do SPA/MF (85 empresas, 185 domínios);
-2. baixa o índice Tranco (top 1 milhão de domínios) e filtra por nome com cara de aposta;
+2. baixa **três índices públicos de domínios vivos** — Tranco, Majestic Million e Cisco Umbrella (2,4 milhões de domínios) — e filtra por nome com cara de aposta;
 3. consulta o Certificate Transparency (crt.sh) para domínios com certificado novo;
 4. resolve DNS e faz **um** GET na página inicial de cada candidato — sem login, sem
    cadastro, sem acessar tela de depósito;
@@ -27,6 +27,7 @@ python3 run.py --max 300 --workers 16
 python3 -m http.server 8000 --directory docs   # abre http://localhost:8000
 ```
 
+Cada execução verifica 2.500 domínios novos (8s por lote de 250, estado salvo a cada lote).
 Só biblioteca padrão do Python 3.11+. Nenhuma chave de API.
 
 ## Rótulos
