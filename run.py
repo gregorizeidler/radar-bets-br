@@ -1,1 +1,11 @@
-import argparse\nimport json\nimport coletor\n\nif __name__ == \"__main__\":\n    p = argparse.ArgumentParser()\n    p.add_argument(\"--max\", type=int, default=260, help=\"domínios verificados nesta execução\")\n    p.add_argument(\"--workers\", type=int, default=14)\n    a = p.parse_args()\n    d = coletor.rodar(max_verificacoes=a.max, workers=a.workers)\n    print(json.dumps(d[\"funil\"], ensure_ascii=False))\n
+import argparse
+import json
+import coletor
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument("--max", type=int, default=260, help="domínios verificados nesta execução")
+    p.add_argument("--workers", type=int, default=14)
+    a = p.parse_args()
+    d = coletor.rodar(max_verificacoes=a.max, workers=a.workers)
+    print(json.dumps(d["funil"], ensure_ascii=False))

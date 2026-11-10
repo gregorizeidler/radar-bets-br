@@ -1,1 +1,172 @@
-\"\"\"Fontes públicas: lista oficial de bets autorizadas (SPA/MF), Certificate\nTransparency (crt.sh) e DNS-over-HTTPS. Somente leitura, sem login, sem cadastro.\"\"\"\nimport json\nimport re\nimport html as htmlmod\nimport time\nimport urllib.parse\nimport urllib.request\n\nUA = (\"Mozilla/5.0 (compatible; RadarBetsBR/1.0; \"\n      \"+https://github.com/gregorizeidler/radar-bets-br)\")\n\nSPA_URL = (\"https://www.gov.br/fazenda/pt-br/composicao/orgaos/\"\n           \"secretaria-de-premios-e-apostas/transparencia-ativa-processos-de-\"\n           \"autorizacao-de-apostas-de-quota-fixa/empresas-autorizadas\")\n\nTERMOS = [\"%.bet\", \"%.tigrinho\", \"%.cassino\", \"%.fortune\", \"%.aviator\",\n          \"%.aposta\", \"%.roleta\", \"%.slot\"]\nRESGATE = {\"bet.br\", \"com.br\", \"net.br\", \"org.br\", \"app.br\", \"dev.br\",\n           \"art.br\", \"blog.br\", \"inf.br\", \"adv.br\", \"eng.br\", \"med.br\",\n           \"seg.br\", \"emp.br\", \"eco.br\", \"pro.br\", \"srv.br\", \"tv.br\",\n           \"co.uk\", \"com.ar\", \"com.ve\", \"co.mz\", \"com.py\"}\n\n\ndef baixar(url, timeout=30, tentativas=3, headers=None):\n    h = {\"User-Agent\": UA, \"Accept\": \"*/*\",\n         \"Accept-Language\": \"pt-BR,pt;q=0.9\"}\n    if headers:\n        h.update(headers)\n    ultimo = None\n    for i in range(tentativas):\n        try:\n            req = urllib.request.Request(url, headers=h)\n            with urllib.request.urlopen(req, timeout=timeout) as r:\n                return r.read(), dict(r.headers), getattr(r, \"status\", 200)\n        except Exception as e:  # noqa: BLE001\n            ultimo = e\n            time.sleep(1.2 * (i + 1))\n    raise ultimo\n\n\ndef _txt(celula):\n    s = re.sub(r\"<[^>]+>\", \" \", celula)\n    s = htmlmod.unescape(s)\n    return re.sub(r\"\\s+\", \" \", s).strip()\n\n\ndef dominio_base(host):\n    host = host.strip().lower().strip(\".\")\n    if host.startswith(\"*.\"):\n        host = host[2:]\n    if not host:\n        return host\n    partes = host.split(\".\")\n    if len(partes) < 2:\n        return host\n    if \".\".join(partes[-2:]) in RESGATE:\n        return \".\".join(partes[-3:])\n    return \".\".join(partes[-2:])\n\n\ndef lista_autorizadas():\n    \"\"\"Lê a tabela oficial: empresa, CNPJ, marcas, domínios, portaria, processo.\"\"\"\n    bruto, _, _ = baixar(SPA_URL, timeout=60, tentativas=3)\n    pagina = bruto.decode(\"utf-8\", \"ignore\")\n    m = re.search(r\"<table.*?</table>\", pagina, re.S)\n    if not m:\n        raise RuntimeError(\"tabela de autorizadas não encontrada na página do SPA\")\n    tabela = m.group(0)\n    empresas = []\n    for linha in re.findall(r\"<tr[^>]*>(.*?)</tr>\", tabela, re.S)[1:]:\n        celulas = re.findall(r\"<t[dh][^>]*>(.*?)</t[dh]>\", linha, re.S)\n        if len(celulas) < 5:\n            continue\n        empresa = _txt(celulas[1])\n        cnpj = _txt(celulas[2])\n        if not re.search(r\"\\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2}\", cnpj):\n            continue\n        marcas = [x.strip(\" •\").strip() for x in re.split(r\"•\", _txt(celulas[3]))]\n        marcas = [x for x in marcas if x]\n        dominios = [d.lower().strip(\",;\") for d in _txt(celulas[4]).split()\n                    if \".\" in d]\n        portaria = _txt(celulas[5]) if len(celulas) > 5 else \"\"\n        req = _txt(celulas[6]) if len(celulas) > 6 else \"\"\n        pdfs = re.findall(r'href=\"([^\"]+\\.pdf)\"', linha)\n        empresas.append({\"empresa\": empresa, \"cnpj\": cnpj, \"marcas\": marcas,\n                         \"dominios\": dominios, \"portaria\": portaria,\n                         \"requerimento\": req, \"processos\": pdfs})\n    if not empresas:\n        raise RuntimeError(\"nenhuma empresa parseada da lista oficial\")\n    return {\n        \"fonte\": SPA_URL,\n        \"atualizado_em\": time.strftime(\"%Y-%m-%d\"),\n        \"total_empresas\": len(empresas),\n        \"total_dominios\": sum(len(e[\"dominios\"]) for e in empresas),\n        \"total_marcas\": sum(len(e[\"marcas\"]) for e in empresas),\n        \"empresas\": empresas,\n    }\n\n\ndef certificados(termo, dias=4, timeout=240):\n    \"\"\"Certificados emitidos na janela, cujo nome contém o termo.\"\"\"\n    url = \"https://crt.sh/?q=%s&output=json\" % urllib.parse.quote(termo)\n    bruto, _, _ = baixar(url, timeout=timeout, tentativas=2)\n    try:\n        registros = json.loads(bruto.decode(\"utf-8\", \"ignore\"))\n    except Exception:  # noqa: BLE001\n        return []\n    if not isinstance(registros, list):\n        return []\n    corte = time.time() - dias * 86400\n    agulha = termo.replace(\"%.\", \"\").lower()\n    saida = []\n    for r in registros:\n        try:\n            emissao = time.mktime(time.strptime(\n                r.get(\"not_before\", \"\")[:19], \"%Y-%m-%dT%H:%M:%S\"))\n        except Exception:  # noqa: BLE001\n            continue\n        if emissao < corte:\n            continue\n        for nome in str(r.get(\"name_value\", \"\")).split(\"\\n\"):\n            nome = nome.strip().lower().lstrip(\"*.\")\n            if not nome or \" \" in nome or agulha not in nome:\n                continue\n            saida.append({\n                \"nome\": nome,\n                \"dominio\": dominio_base(nome),\n                \"emissao\": r.get(\"not_before\", \"\")[:10],\n                \"emissor\": (r.get(\"issuer_name\") or \"\")[:120],\n                \"certificado\": r.get(\"id\"),\n            })\n    return saida\n\n\ndef dns(host, timeout=8):\n    \"\"\"A e NS via DNS-over-HTTPS do Google (sem chave, sem limite prático).\"\"\"\n    saida = {\"a\": [], \"ns\": []}\n    for tipo, chave in ((\"A\", \"a\"), (\"NS\", \"ns\")):\n        try:\n            url = \"https://dns.google/resolve?name=%s&type=%s\" % (\n                urllib.parse.quote(host), tipo)\n            bruto, _, _ = baixar(url, timeout=timeout, tentativas=1)\n            dados = json.loads(bruto.decode(\"utf-8\", \"ignore\"))\n            for a in dados.get(\"Answer\", []) or []:\n                valor = str(a.get(\"data\", \"\")).strip().rstrip(\".\")\n                if not valor or valor in saida[chave]:\n                    continue\n                if tipo == \"A\" and not re.match(r\"^\\d{1,3}(\\.\\d{1,3}){3}$\", valor):\n                    continue\n                saida[chave].append(valor)\n        except Exception:  # noqa: BLE001\n            continue\n    return saida\n\n\ndef pagina(host, timeout=9):\n    \"\"\"Um único GET na home, sem seguir caminhos internos, sem login.\"\"\"\n    for esquema in (\"https\", \"http\"):\n        try:\n            bruto, headers, status = baixar(\n                \"%s://%s/\" % (esquema, host), timeout=timeout, tentativas=1)\n            return {\n                \"status\": status,\n                \"servidor\": (headers.get(\"Server\") or \"\")[:60],\n                \"tamanho\": len(bruto),\n                \"html\": bruto[:400000].decode(\"utf-8\", \"ignore\"),\n                \"url\": \"%s://%s/\" % (esquema, host),\n            }\n        except Exception:  # noqa: BLE001\n            continue\n    return None\n
+"""Fontes públicas: lista oficial de bets autorizadas (SPA/MF), Certificate
+Transparency (crt.sh) e DNS-over-HTTPS. Somente leitura, sem login, sem cadastro."""
+import json
+import re
+import html as htmlmod
+import time
+import urllib.parse
+import urllib.request
+
+UA = ("Mozilla/5.0 (compatible; RadarBetsBR/1.0; "
+      "+https://github.com/gregorizeidler/radar-bets-br)")
+
+SPA_URL = ("https://www.gov.br/fazenda/pt-br/composicao/orgaos/"
+           "secretaria-de-premios-e-apostas/transparencia-ativa-processos-de-"
+           "autorizacao-de-apostas-de-quota-fixa/empresas-autorizadas")
+
+TERMOS = ["%.bet", "%.tigrinho", "%.cassino", "%.fortune", "%.aviator",
+          "%.aposta", "%.roleta", "%.slot"]
+RESGATE = {"bet.br", "com.br", "net.br", "org.br", "app.br", "dev.br",
+           "art.br", "blog.br", "inf.br", "adv.br", "eng.br", "med.br",
+           "seg.br", "emp.br", "eco.br", "pro.br", "srv.br", "tv.br",
+           "co.uk", "com.ar", "com.ve", "co.mz", "com.py"}
+
+
+def baixar(url, timeout=30, tentativas=3, headers=None):
+    h = {"User-Agent": UA, "Accept": "*/*",
+         "Accept-Language": "pt-BR,pt;q=0.9"}
+    if headers:
+        h.update(headers)
+    ultimo = None
+    for i in range(tentativas):
+        try:
+            req = urllib.request.Request(url, headers=h)
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read(), dict(r.headers), getattr(r, "status", 200)
+        except Exception as e:  # noqa: BLE001
+            ultimo = e
+            time.sleep(1.2 * (i + 1))
+    raise ultimo
+
+
+def _txt(celula):
+    s = re.sub(r"<[^>]+>", " ", celula)
+    s = htmlmod.unescape(s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def dominio_base(host):
+    host = host.strip().lower().strip(".")
+    if host.startswith("*."):
+        host = host[2:]
+    if not host:
+        return host
+    partes = host.split(".")
+    if len(partes) < 2:
+        return host
+    if ".".join(partes[-2:]) in RESGATE:
+        return ".".join(partes[-3:])
+    return ".".join(partes[-2:])
+
+
+def lista_autorizadas():
+    """Lê a tabela oficial: empresa, CNPJ, marcas, domínios, portaria, processo."""
+    bruto, _, _ = baixar(SPA_URL, timeout=60, tentativas=3)
+    pagina = bruto.decode("utf-8", "ignore")
+    m = re.search(r"<table.*?</table>", pagina, re.S)
+    if not m:
+        raise RuntimeError("tabela de autorizadas não encontrada na página do SPA")
+    tabela = m.group(0)
+    empresas = []
+    for linha in re.findall(r"<tr[^>]*>(.*?)</tr>", tabela, re.S)[1:]:
+        celulas = re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", linha, re.S)
+        if len(celulas) < 5:
+            continue
+        empresa = _txt(celulas[1])
+        cnpj = _txt(celulas[2])
+        if not re.search(r"\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}", cnpj):
+            continue
+        marcas = [x.strip(" •").strip() for x in re.split(r"•", _txt(celulas[3]))]
+        marcas = [x for x in marcas if x]
+        dominios = [d.lower().strip(",;") for d in _txt(celulas[4]).split()
+                    if "." in d]
+        portaria = _txt(celulas[5]) if len(celulas) > 5 else ""
+        req = _txt(celulas[6]) if len(celulas) > 6 else ""
+        pdfs = re.findall(r'href="([^"]+\.pdf)"', linha)
+        empresas.append({"empresa": empresa, "cnpj": cnpj, "marcas": marcas,
+                         "dominios": dominios, "portaria": portaria,
+                         "requerimento": req, "processos": pdfs})
+    if not empresas:
+        raise RuntimeError("nenhuma empresa parseada da lista oficial")
+    return {
+        "fonte": SPA_URL,
+        "atualizado_em": time.strftime("%Y-%m-%d"),
+        "total_empresas": len(empresas),
+        "total_dominios": sum(len(e["dominios"]) for e in empresas),
+        "total_marcas": sum(len(e["marcas"]) for e in empresas),
+        "empresas": empresas,
+    }
+
+
+def certificados(termo, dias=4, timeout=240):
+    """Certificados emitidos na janela, cujo nome contém o termo."""
+    url = "https://crt.sh/?q=%s&output=json" % urllib.parse.quote(termo)
+    bruto, _, _ = baixar(url, timeout=timeout, tentativas=2)
+    try:
+        registros = json.loads(bruto.decode("utf-8", "ignore"))
+    except Exception:  # noqa: BLE001
+        return []
+    if not isinstance(registros, list):
+        return []
+    corte = time.time() - dias * 86400
+    agulha = termo.replace("%.", "").lower()
+    saida = []
+    for r in registros:
+        try:
+            emissao = time.mktime(time.strptime(
+                r.get("not_before", "")[:19], "%Y-%m-%dT%H:%M:%S"))
+        except Exception:  # noqa: BLE001
+            continue
+        if emissao < corte:
+            continue
+        for nome in str(r.get("name_value", "")).split("\n"):
+            nome = nome.strip().lower().lstrip("*.")
+            if not nome or " " in nome or agulha not in nome:
+                continue
+            saida.append({
+                "nome": nome,
+                "dominio": dominio_base(nome),
+                "emissao": r.get("not_before", "")[:10],
+                "emissor": (r.get("issuer_name") or "")[:120],
+                "certificado": r.get("id"),
+            })
+    return saida
+
+
+def dns(host, timeout=8):
+    """A e NS via DNS-over-HTTPS do Google (sem chave, sem limite prático)."""
+    saida = {"a": [], "ns": []}
+    for tipo, chave in (("A", "a"), ("NS", "ns")):
+        try:
+            url = "https://dns.google/resolve?name=%s&type=%s" % (
+                urllib.parse.quote(host), tipo)
+            bruto, _, _ = baixar(url, timeout=timeout, tentativas=1)
+            dados = json.loads(bruto.decode("utf-8", "ignore"))
+            for a in dados.get("Answer", []) or []:
+                valor = str(a.get("data", "")).strip().rstrip(".")
+                if not valor or valor in saida[chave]:
+                    continue
+                if tipo == "A" and not re.match(r"^\d{1,3}(\.\d{1,3}){3}$", valor):
+                    continue
+                saida[chave].append(valor)
+        except Exception:  # noqa: BLE001
+            continue
+    return saida
+
+
+def pagina(host, timeout=9):
+    """Um único GET na home, sem seguir caminhos internos, sem login."""
+    for esquema in ("https", "http"):
+        try:
+            bruto, headers, status = baixar(
+                "%s://%s/" % (esquema, host), timeout=timeout, tentativas=1)
+            return {
+                "status": status,
+                "servidor": (headers.get("Server") or "")[:60],
+                "tamanho": len(bruto),
+                "html": bruto[:400000].decode("utf-8", "ignore"),
+                "url": "%s://%s/" % (esquema, host),
+            }
+        except Exception:  # noqa: BLE001
+            continue
+    return None
