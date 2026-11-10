@@ -1,12 +1,9 @@
 name: diario
+
 on:
   schedule:
-    - cron: "0 9 * * *"   # 06:00 em Brasília
+    - cron: "0 9 * * *"
   workflow_dispatch:
-    inputs:
-      max:
-        description: "quantos domínios verificar nesta execução"
-        default: "300"
 
 permissions:
   contents: write
@@ -27,7 +24,9 @@ jobs:
       - name: testes
         run: python3 tests/test_analise.py
       - name: coleta
-        run: python3 run.py --max "${{ github.event.inputs.max || '300' }}" --workers 16
+        env:
+          MAX: "350"
+        run: python3 run.py --max "$MAX" --workers 16
       - name: publica
         run: |
           git config user.name "radar-bets-bot"
