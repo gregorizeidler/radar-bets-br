@@ -92,6 +92,10 @@ footer{border-top:1px solid var(--linha);margin-top:30px;padding:26px 0 60px;col
 .botao:hover{border-color:#33506e;text-decoration:none}
 small.fonte{color:#6f8194;font-size:12px}
 @media(max-width:640px){h1{font-size:26px}th{position:static}.topo nav{display:none}}
+.ach-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:14px 0 6px}
+.ach{background:#0e1620;border:1px solid var(--linha);border-left:3px solid #2ecc8f;border-radius:10px;padding:12px 14px}
+.ach b{display:block;font-size:15px;color:var(--texto);margin-bottom:4px}
+.ach span{font-size:12.5px;color:var(--dim);line-height:1.45;word-break:break-word}
 </style>
 </head>
 <body>
@@ -117,6 +121,10 @@ small.fonte{color:#6f8194;font-size:12px}
 
   <div class="kpis" id="kpis"></div>
 
+  <section id="achados-sec">
+    <div id="achados"></div>
+  </section>
+
   <div class="aviso">
     <b>Candidato suspeito não é plataforma ilegal.</b> O radar marca domínio como <i>sem registro</i> quando ele tem cara de casa de aposta e não está na lista oficial do SPA/MF — isso inclui site internacional que nem atua no Brasil. Só a lista de bloqueio da Anatel e a lista oficial de autorizadas provam situação legal. Aqui os dados são um mapa de onde olhar, não uma acusação.
   </div>
@@ -125,7 +133,7 @@ small.fonte{color:#6f8194;font-size:12px}
     <h2>O funil de cada varredura</h2>
     <p class="dica">Do universo de domínios até o que disca como casa de aposta. O número grande embaixo de cada passo é o acumulado do histórico; a linha pequena é o que aconteceu na última varredura.</p>
     <div class="funil" id="funil"></div>
-  </section>
+  <div id="achados"></div></section>
 
   <section id="dominios">
     <h2>Domínios com cara de casa de aposta</h2>
@@ -155,6 +163,7 @@ small.fonte{color:#6f8194;font-size:12px}
         <tbody id="linhas"></tbody>
       </table>
     </div>
+    <div class="dica" id="contador"></div>
     <div class="vazio" id="sem-resultado" style="display:none">Nada com esse filtro.</div>
   </section>
 
@@ -262,6 +271,7 @@ small.fonte{color:#6f8194;font-size:12px}
 const fmt = n => (n==null? '—' : new Intl.NumberFormat('pt-BR').format(n));
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let DADOS = null, AUT = null, DOMS = [];
+window._limite = 150;
 
 function rotulo(c){
   if(c==='clone') return '<span class="rot clone">clone</span>';
@@ -270,15 +280,22 @@ function rotulo(c){
 }
 
 async function carregar(){
-  const r = await fetch('dados/atual.json?t=' + Date.now());
-  DADOS = await r.json();
-  fetch('dados/autorizadas.json?t=' + Date.now()).then(x=>x.json()).then(a=>{AUT=a; renderAutorizadas();}).catch(()=>{});
-  DOMS = DADOS.dominios || [];
-  render();
+  try{
+    const r = await fetch('dados/atual.json?t=' + Date.now());
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    DADOS = await r.json();
+    fetch('dados/autorizadas.json?t=' + Date.now()).then(x=>x.json()).then(a=>{AUT=a; renderAutorizadas();}).catch(()=>{});
+    DOMS = DADOS.dominios || [];
+    render();
+  }catch(e){
+    document.getElementById('kpis').innerHTML =
+      '<div class="kpi ruim"><b>!</b><span>não consegui carregar os dados ('+esc(e.message)+'). Recarregue a página em alguns segundos.</span></div>';
+  }
 }
 
 function render(){
   const f = DADOS.funil || {};
+  const v = (DADOS.varreduras && DADOS.varreduras.length) ? DADOS.varreduras[DADOS.varreduras.length-1] : {};
   const data = DADOS.gerado_em ? DADOS.gerado_em.split('-').reverse().join('/') : '—';
   document.getElementById('data-geracao').textContent = 'última varredura: ' + data + ' · atualiza todo dia às 06:00 (Brasília)';
   document.getElementById('rodape-data').textContent = data;
@@ -296,7 +313,6 @@ function render(){
     ['autorizadas na lista oficial', fmt(f.empresas_oficiais), 'bom'],
   ].map(([r,v,c])=>'<div class="kpi '+c+'"><b>'+v+'</b><span>'+r+'</span></div>').join('');
 
-  const v = DADOS.varreduras && DADOS.varreduras.length ? DADOS.varreduras[DADOS.varreduras.length-1] : {};
   const passos = [
     ['Universo', fmt(f.universo), 'Tranco + Majestic + Umbrella, 3 índices'],
     ['Candidatos por nome', fmt(f.candidatos_nome), (v.candidatos_por_nome!=null? fmt(v.candidatos_por_nome)+' nesta varredura' : 'filtro por termo no domínio')],
@@ -310,6 +326,7 @@ function render(){
     (i?'<div class="seta">›</div>':'')+'<div class="passo"><div class="r">'+esc(p[0])+'</div><div class="n">'+p[1]+'</div><div class="r">'+esc(p[2])+'</div></div>'
   ).join('');
 
+  renderAchados();
   renderTabela();
   renderOps();
   renderTld();
@@ -317,6 +334,23 @@ function render(){
   renderRotacao();
   renderMeiaVida();
   if(AUT) renderAutorizadas();
+}
+
+function renderAchados(){
+  const f = DADOS.funil || {};
+  const ops = (DADOS.operacoes||[]).filter(o=>o.n>=2);
+  const maior = ops[0];
+  const br = (DADOS.dominios||[]).filter(d=>d.br);
+  const clones = (DADOS.dominios||[]).filter(d=>d.classe==='clone');
+  const topSinal = (DADOS.dominios||[]).slice().sort((a,b)=>(b.p||0)-(a.p||0)).slice(0,6);
+  const cards = [];
+  if(maior) cards.push({t:'maior operação: '+fmt(maior.n)+' domínios', d:maior.hosts.slice(0,5).join(' · ')});
+  cards.push({t:fmt(f.sem_registro)+' domínios fora da lista oficial', d:'têm cara de casa de aposta e não aparecem entre as '+fmt(f.empresas_oficiais)+' empresas autorizadas'});
+  cards.push({t:fmt(f.no_brasil||0)+' falando com o Brasil', d:'sinais de Pix, reais, CPF ou domínio .br — os primeiros da lista'});
+  if(clones.length) cards.push({t:fmt(f.clones)+' clones de marca autorizada', d:clones.slice(0,4).map(c=>c.d).join(' · ')});
+  if(topSinal.length) cards.push({t:'mais sinais de aposta', d:topSinal.map(c=>c.d).join(' · ')});
+  document.getElementById('achados').innerHTML = '<h2>O que o radar achou</h2><div class="ach-grid">' +
+    cards.map(c=>'<div class="ach"><b>'+esc(c.t)+'</b><span>'+esc(c.d)+'</span></div>').join('') + '</div>';
 }
 
 function renderTabela(){
@@ -333,9 +367,16 @@ function renderTabela(){
     if(!q) return true;
     const alvo = [d.d, d.m, (d.ip||[]).join(' '), (d.g||[]).join(' '), (d.s||[]).join(' '), d.t].join(' ').toLowerCase();
     return alvo.includes(q);
-  }).slice(0, 600);
+  });
+  window._filtrados = lista;
+  const vis = lista.slice(0, window._limite || 150);
   document.getElementById('sem-resultado').style.display = lista.length? 'none':'block';
-  document.getElementById('linhas').innerHTML = lista.map(d=>{
+  const cont = document.getElementById('contador');
+  if(cont){
+    cont.innerHTML = 'mostrando ' + fmt(vis.length) + ' de ' + fmt(lista.length) + ' domínios' +
+      (lista.length > vis.length ? ' — <a href="#" onclick="maisLinhas();return false;" style="color:var(--ok)">ver mais 150</a>' : '');
+  }
+  document.getElementById('linhas').innerHTML = vis.map(d=>{
     const i = DOMS.indexOf(d);
     return '<tr data-i="'+i+'"><td class="dom">'+esc(d.d)+(d.br? ' <span class="tag" style="color:#6ee7b7">BR</span>':'')+'</td><td>'+rotulo(d.classe)+
       (d.m? ' <span class="tag">'+esc(d.m)+'</span>':'')+'</td>'+
@@ -344,6 +385,11 @@ function renderTabela(){
       '<td>'+(d.op? ('#'+d.op) : '—')+'</td>'+
       '<td class="dom">'+esc((d.ip||[])[0]||'')+'</td></tr>';
   }).join('');
+}
+
+function maisLinhas(){
+  window._limite = (window._limite||150) + 150;
+  renderTabela();
 }
 
 function renderOps(){
