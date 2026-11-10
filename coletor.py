@@ -286,7 +286,7 @@ def rodar(max_verificacoes=2000, workers=24, verbose=True, lote_salvar=250):
             r["classe"] = "descartado"
 
     bets = [r for r in todos if r.get("classe") in ("clone", "sem_registro", "autorizada")]
-    grupos = analise.clusters(bets, chaves=("ip", "k", "g"))
+    grupos = analise.clusters(bets)
     operacoes = []
     for i, g in enumerate(sorted(grupos, key=len, reverse=True)):
         if len(g) < 2:

@@ -203,15 +203,15 @@ def ip_dedicado(ip):
     return not any(end in rede for rede in CDN)
 
 
-def clusters(itens, chaves=("ip", "k", "g")):
-    """Componentes conexos por infraestrutura compartilhada (union-find).
+def clusters(itens, max_por_ip=4):
+    """Componentes conexos: kit, ID de analytics e IP dedicado.
 
-    IP de CDN não conta: milhares de sites dividem o mesmo endereço. Nameserver
-    também não entra: Cloudflare e registradores hospedam centenas de milhares."""
-    pai = {}
+    Kit (arquivos estáticos + título) e ID de analytics são a impressão digital
+    de quem monta o site. IP só vale quando poucos domínios o dividem — acima
+    disso é hospedagem/CDN e não diz nada."""
+    pai = {i: i for i in range(len(itens))}
 
     def acha(x):
-        pai.setdefault(x, x)
         while pai[x] != x:
             pai[x] = pai[pai[x]]
             x = pai[x]
@@ -222,41 +222,23 @@ def clusters(itens, chaves=("ip", "k", "g")):
         if ra != rb:
             pai[rb] = ra
 
-    for i, it in enumerate(itens):
-        no = "d:%d" % i
-        acha(no)
-        for chave in chaves:
-            valores = it.get(chave) or []
-            if isinstance(valores, str):
-                valores = [valores]
-            for v in valores:
-                if not v:
-                    continue
-                if chave == "ip" and not ip_dedicado(v):
-                    continue
-                une(no, "%s:%s" % (chave, str(v).lower()))
+    chaves = {}
+    ips_usados = {}
+    for i, r in enumerate(itens):
+        if r.get("k"):
+            chaves.setdefault("k:" + r["k"], []).append(i)
+        for ga in r.get("g", []):
+            chaves.setdefault("g:" + ga, []).append(i)
+        for ip in r.get("ip", []):
+            ips_usados.setdefault(ip, []).append(i)
+    for ip, donos in ips_usados.items():
+        if len(donos) <= max_por_ip:
+            chaves.setdefault("ip:" + ip, donos)
+    for donos in chaves.values():
+        for j in donos[1:]:
+            une(donos[0], j)
+
     grupos = {}
-    for i, it in enumerate(itens):
-        grupos.setdefault(acha("d:%d" % i), []).append(it)
+    for i in range(len(itens)):
+        grupos.setdefault(acha(i), []).append(itens[i])
     return list(grupos.values())
-
-
-SINAIS_BR = ["pix", "r$", "reais", "cpf", "brasil", "brl", "jogo do bicho",
-             "tigrinho", "saque", "aposta", "apostas", "cassino", "placar",
-             "rodada gratis", "rodada grátis", "depósito", "deposito"]
-
-
-def eh_brasil(dominio, titulo="", sinais=None):
-    """Marca o domínio como operando em português do Brasil.
-
-    Não é nacionalidade de empresa: é sinal de que a página fala com o
-    brasileiro (Pix, reais, CPF, TLD .br)."""
-    d = (dominio or "").lower()
-    pontos = 0
-    if d.endswith(".br"):
-        pontos += 4
-    texto = ((titulo or "") + " " + " ".join(sinais or [])).lower()
-    for s in SINAIS_BR:
-        if s in texto:
-            pontos += 2
-    return pontos >= 4
