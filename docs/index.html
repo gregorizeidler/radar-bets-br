@@ -96,6 +96,13 @@ small.fonte{color:#6f8194;font-size:12px}
 .ach{background:#0e1620;border:1px solid var(--linha);border-left:3px solid #2ecc8f;border-radius:10px;padding:12px 14px}
 .ach b{display:block;font-size:15px;color:var(--texto);margin-bottom:4px}
 .ach span{font-size:12.5px;color:var(--dim);line-height:1.45;word-break:break-word}
+.porque{margin:6px 0 16px;padding-left:18px;font-size:13px;line-height:1.55;color:var(--texto)}
+.porque li{margin-bottom:6px}
+.btn-abrir{display:inline-block;margin:10px 0 6px;padding:8px 12px;border-radius:8px;background:#123; border:1px solid var(--ok);color:var(--ok);text-decoration:none;font-size:13px}
+h4{margin:16px 0 4px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+#painel h3.dom a{color:inherit;text-decoration:none;border-bottom:1px dotted var(--dim)}
+td.dom a{color:#cfe7ff;text-decoration:none;border-bottom:1px dotted #35506b}
+td.dom a:hover{color:#fff}
 </style>
 </head>
 <body>
@@ -378,7 +385,7 @@ function renderTabela(){
   }
   document.getElementById('linhas').innerHTML = vis.map(d=>{
     const i = DOMS.indexOf(d);
-    return '<tr data-i="'+i+'"><td class="dom">'+esc(d.d)+(d.br? ' <span class="tag" style="color:#6ee7b7">BR</span>':'')+'</td><td>'+rotulo(d.classe)+
+    return '<tr data-i="'+i+'"><td class="dom"><a href="https://'+esc(d.d)+'" target="_blank" rel="noopener noreferrer nofollow" onclick="event.stopPropagation()">'+esc(d.d)+' ↗</a>'+(d.br? ' <span class="tag" style="color:#6ee7b7">BR</span>':'')+'</td><td>'+rotulo(d.classe)+
       (d.m? ' <span class="tag">'+esc(d.m)+'</span>':'')+'</td>'+
       '<td class="pts">'+fmt(d.p)+'</td>'+
       '<td>'+(d.s||[]).slice(0,4).map(s=>'<span class="tag">'+esc(s)+'</span>').join('')+'</td>'+
@@ -460,16 +467,45 @@ document.addEventListener('input', e=>{
 document.addEventListener('change', e=>{
   if(e.target.id==='filtro-classe'||e.target.id==='filtro-op'||e.target.id==='filtro-pais') renderTabela();
 });
-document.getElementById('linhas').addEventListener('click', e=>{
-  const tr = e.target.closest('tr'); if(!tr) return;
-  const d = DOMS[+tr.dataset.i]; if(!d) return;
+
+function contarPorCampo(campo, valor){
+  if(!valor) return 0;
+  return DOMS.filter(x=>{
+    if(campo==='k') return x.k===valor;
+    if(campo==='op') return x.op===valor;
+    return (x[campo]||[]).indexOf(valor)>=0;
+  }).length;
+}
+
+function porQue(d){
+  const f = [];
+  const fortes = d.pf || [];
+  f.push('A página inicial respondeu com <b>'+fmt(d.p)+' pontos</b> de sinal (o corte é 8) e '+
+    (fortes.length? '<b>'+fortes.length+' termo(s) forte(s)</b>: '+fortes.map(t=>'&ldquo;'+esc(t)+'&rdquo;').join(', ') : 'nenhum termo forte'));
+  const medios = (d.s||[]).filter(s=>fortes.indexOf(s)<0);
+  if(medios.length) f.push('Somaram pontos também: '+medios.map(t=>'&ldquo;'+esc(t)+'&rdquo;').join(', ')+'.');
+  if(d.classe==='clone') f.push('O nome imita a marca <b>'+esc(d.m||'autorizada')+'</b>, de operadora autorizada, mas em domínio que não é o oficial.');
+  else f.push('O domínio <b>não está</b> na lista oficial de autorizadas do SPA/MF.');
+  if(d.t) f.push('Título da página: &ldquo;'+esc(d.t)+'&rdquo;.');
+  if(d.k){ const n=contarPorCampo('k',d.k); if(n>1) f.push('Usa o <b>mesmo kit</b> (arquivos JS/CSS + título) de outros '+fmt(n-1)+' domínios — mesma operação.'); }
+  (d.g||[]).forEach(g=>{ const n=contarPorCampo('g',g); if(n>1) f.push('Divide o ID de analytics <b>'+esc(g)+'</b> com mais '+fmt(n-1)+' domínio(s).'); });
+  (d.ip||[]).forEach(ip=>{ const n=contarPorCampo('ip',ip); if(n>1 && n<=4) f.push('O IP <b>'+esc(ip)+'</b> é dedicado e dividido com '+fmt(n-1)+' domínio(s).'); });
+  if(d.br) f.push('Tem sinais de Brasil (Pix, reais, CPF ou domínio .br).');
+  if(d.op) f.push('Entrou no grupo da operação <b>#'+d.op+'</b>, por kit, analytics ou IP em comum.');
+  if(d.st==='morto') f.push('Na última checagem o domínio <b>não abriu</b>.');
+  return '<ul class="porque">'+f.map(x=>'<li>'+x+'</li>').join('')+'</ul>';
+}
+
+function montarDetalhe(d){
   const linha = (a,b)=>'<dt>'+a+'</dt><dd>'+b+'</dd>';
-  document.getElementById('painel').innerHTML =
-    '<button class="fechar" onclick="document.getElementById(\'detalhe\').classList.remove(\'aberto\')">fechar</button>'+
-    '<h3 class="dom">'+esc(d.d)+'</h3>'+rotulo(d.classe)+
+  const url = 'https://'+esc(d.d);
+  return '<button class="fechar" data-fecha="1">fechar</button>'+
+    '<h3 class="dom"><a href="'+url+'" target="_blank" rel="noopener noreferrer nofollow">'+esc(d.d)+' ↗</a></h3>'+rotulo(d.classe)+
+    '<p><a class="btn-abrir" href="'+url+'" target="_blank" rel="noopener noreferrer nofollow">abrir o site em nova aba ↗</a></p>'+
+    '<h4>Por que apareceu</h4>'+porQue(d)+
     '<dl>'+
     linha('título', esc(d.t||'—'))+
-    linha('pontuação', fmt(d.p)+' pontos'+(d.pf&&d.pf.length? ' · fortes: '+esc(d.pf.join(', ')):'') )+
+    linha('pontuação', fmt(d.p)+' pontos')+
     linha('sinais', (d.s||[]).map(s=>'<span class="tag">'+esc(s)+'</span>').join('')||'—')+
     linha('marca parecida', esc(d.m||'—'))+
     linha('IPs', (d.ip||[]).join('<br>')||'—')+
@@ -479,11 +515,18 @@ document.getElementById('linhas').addEventListener('click', e=>{
     linha('servidor', esc(d.sv||'—'))+
     linha('HTTP', esc(d.ht||'—'))+
     linha('primeira aparição', esc(d.pr||'—'))+
-    linha('última verificação', esc(d.visto||'—')+(d.st==='morto'? ' <b style="color:var(--vermelho)">fora do ar</b>':''))+
+    linha('última verificação', esc(d.visto||'—'))+
     linha('operação', d.op? '<a href="#operacoes">#'+d.op+'</a>' : 'domínio isolado')+
     '</dl>';
+}
+
+document.getElementById('linhas').addEventListener('click', e=>{
+  const tr = e.target.closest('tr'); if(!tr) return;
+  const d = DOMS[+tr.dataset.i]; if(!d) return;
+  document.getElementById('painel').innerHTML = montarDetalhe(d);
   document.getElementById('detalhe').classList.add('aberto');
 });
+document.addEventListener('click', e=>{ if(e.target.dataset && e.target.dataset.fecha){ document.getElementById('detalhe').classList.remove('aberto'); } });
 document.getElementById('detalhe').addEventListener('click', e=>{
   if(e.target.id==='detalhe') e.currentTarget.classList.remove('aberto');
 });
